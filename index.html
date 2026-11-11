@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SeqGen Web — 时序图编辑器</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+
+  <header id="toolbar">
+    <div id="logo">SeqGen<span class="logo-badge">Web</span></div>
+    <div class="tb-sep"></div>
+
+    <div class="menu-wrap">
+      <button class="tb" id="btn-file">☰ 文件 ▾</button>
+      <div class="menu" id="menu-file">
+        <button data-act="new">新建<span class="kbd">Ctrl+N</span></button>
+        <button data-act="open">打开工程…<span class="kbd">Ctrl+O</span></button>
+        <button data-act="save">保存工程…<span class="kbd">Ctrl+S</span></button>
+        <button data-act="saveas">另存为…<span class="kbd">Ctrl+Shift+S</span></button>
+        <div class="menu-sep"></div>
+        <button data-act="sample">载入示例</button>
+        <button data-act="clear" class="danger">清空画布</button>
+      </div>
+    </div>
+
+    <div class="menu-wrap">
+      <button class="tb" id="btn-export">⬇ 导出 ▾</button>
+      <div class="menu" id="menu-export">
+        <button data-act="png">PNG 位图…</button>
+        <button data-act="svg">SVG 矢量图…</button>
+        <button data-act="pdf">PDF 文档…</button>
+        <div class="menu-sep"></div>
+        <button data-act="clipboard">复制为图片<span class="kbd">Ctrl+Shift+C</span></button>
+        <button data-act="svgcode">复制 SVG 源码</button>
+      </div>
+    </div>
+
+    <div class="tb-sep"></div>
+
+    <button class="tb icon active" id="tool-select" title="选择 / 拖动边沿">↖</button>
+    <button class="tb icon" id="tool-text" title="文本标注">T</button>
+    <button class="tb icon" id="tool-arrow" title="直线箭头">↗</button>
+    <button class="tb icon" id="tool-bezier" title="贝塞尔曲线">∿</button>
+    <button class="tb icon" id="tool-bracket" title="Setup / Hold 区间">⟷</button>
+    <button class="tb icon" id="tool-break" title="时间断点（Shift 点击 = 全部行）">⌇</button>
+
+    <div class="tb-sep"></div>
+
+    <button class="tb" id="add-clock" title="添加时钟">+ Clk</button>
+    <button class="tb" id="add-signal" title="添加信号">+ Sig</button>
+    <button class="tb" id="add-bus" title="添加总线">+ Bus</button>
+    <button class="tb" id="add-sep" title="添加分隔行">+ Sep</button>
+
+    <div class="tb-sep"></div>
+
+    <button class="tb icon" id="btn-undo" title="撤销 (Ctrl+Z)" disabled>↩</button>
+    <button class="tb icon" id="btn-redo" title="重做 (Ctrl+Y)" disabled>↪</button>
+
+    <div class="tb-sep"></div>
+
+    <button class="tb icon" id="btn-zoom-out" title="缩小 (Ctrl+减号)">⊖</button>
+    <div class="menu-wrap">
+      <button class="tb zoom-btn" id="btn-zoom" title="缩放比例（点击选择）">
+        <span id="zoom-label">100%</span><span class="zcaret">▾</span>
+      </button>
+      <div class="menu" id="menu-zoom">
+        <button data-zoom="fit">适应宽度</button>
+        <div class="menu-sep"></div>
+        <button data-zoom="0.5">50%</button>
+        <button data-zoom="0.75">75%</button>
+        <button data-zoom="1">100%<span class="kbd">Ctrl+0</span></button>
+        <button data-zoom="1.5">150%</button>
+        <button data-zoom="2">200%</button>
+      </div>
+    </div>
+    <button class="tb icon" id="btn-zoom-in" title="放大 (Ctrl+加号)">⊕</button>
+    <button class="tb icon" id="btn-fit" title="适应宽度">⤢</button>
+
+    <div class="tb-spacer"></div>
+    <div class="menu-wrap">
+      <button class="tb icon" id="btn-theme" title="配色主题">☼</button>
+      <div class="menu menu-theme" id="menu-theme">
+        <button data-theme="dark"><span class="sw" style="background:#16213e;border-color:#4fbdba"></span>靛青</button>
+        <button data-theme="graphite"><span class="sw" style="background:#1c1f25;border-color:#3ddc97"></span>石墨</button>
+        <button data-theme="navy"><span class="sw" style="background:#111a2e;border-color:#4d8cf5"></span>藏蓝</button>
+        <button data-theme="carbon"><span class="sw" style="background:#101013;border-color:#f0b429"></span>纯黑</button>
+        <div class="menu-sep"></div>
+        <button data-theme="light"><span class="sw" style="background:#ffffff;border-color:#0f8a86"></span>浅色</button>
+      </div>
+    </div>
+    <button class="tb icon" id="btn-help" title="快捷键与帮助">?</button>
+  </header>
+
+  <div id="workspace">
+    <div id="canvas-wrap">
+      <div id="canvas-scroll">
+        <svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+      <div id="empty-hint">
+        <div class="eh-title">空白画布</div>
+        <div class="eh-sub">从工具栏添加第一行信号</div>
+        <div class="eh-btns">
+          <button class="eh-btn" data-add="clock">+ 时钟</button>
+          <button class="eh-btn" data-add="signal">+ 信号</button>
+          <button class="eh-btn" data-add="bus">+ 总线</button>
+          <button class="eh-btn ghost" data-act="sample">载入示例</button>
+        </div>
+        <div class="eh-tips">
+          双击信号行可在该时刻插入边沿（上半 = 高，下半 = 低）<br>
+          单击行名打开属性面板 · 拖动边沿改变时序 · 拖动时钟波形改变相位
+        </div>
+      </div>
+    </div>
+
+    <aside id="props">
+      <div class="props-head">
+        <span>属性</span>
+        <button id="props-close" title="关闭面板">×</button>
+      </div>
+      <div id="props-body"></div>
+    </aside>
+  </div>
+
+  <footer id="statusbar">
+    <span id="status-tool">选择工具</span>
+    <span class="sb-sep"></span>
+    <span id="status-hint"></span>
+    <span class="sb-spacer"></span>
+    <span id="status-info"></span>
+    <span class="sb-sep"></span>
+    <span class="sb-free">全部功能免费 · 无限制</span>
+  </footer>
+</div>
+
+<div id="ctxmenu"></div>
+<div id="toast"></div>
+<input type="file" id="file-input" accept=".json,application/json" hidden>
+
+<script src="app.js"></script>
+</body>
+</html>
