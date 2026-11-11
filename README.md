@@ -2,6 +2,8 @@
 
 **在浏览器里画数字时序图的单文件工具。** 零依赖、无需安装、不用编译——双击 `index.html` 就能用。
 
+**[▶ 在线试用 Demo](https://seqgen.app.workbuddy.host/?sharecode=EU4R7DTJ36)**（无需下载，打开即用）
+
 ![界面截图](assets/screenshot.png)
 
 <sub>浅色主题见 [assets/screenshot-light.png](assets/screenshot-light.png)</sub>
@@ -23,9 +25,13 @@
 
 ## 快速开始
 
+不想装任何东西：直接打开 **[在线 Demo](https://seqgen.app.workbuddy.host/?sharecode=EU4R7DTJ36)**。
+
+想在本地跑：
+
 ```bash
-git clone https://github.com/<your-name>/seqgen-web.git
-cd seqgen-web
+git clone https://github.com/linrx1511/SeqGen.git
+cd SeqGen
 ```
 
 然后 **直接双击 `index.html`**（或拖进浏览器）即可，不需要任何服务器。
@@ -204,7 +210,7 @@ python -m http.server 8000
 ## 项目结构
 
 ```
-seqgen-web/
+SeqGen/
 ├── index.html       界面骨架：工具栏、画布容器、属性面板
 ├── styles.css       全部样式，含 5 套主题的 CSS 变量
 ├── app.js           全部逻辑：数据模型 / 渲染 / 交互 / 导入导出
@@ -248,6 +254,8 @@ seqgen-web/
 ## English
 
 **SeqGen Web** is a zero-dependency, single-page digital timing diagram editor that runs entirely in the browser — just open `index.html`.
+
+**▶ [Live demo](https://seqgen.app.workbuddy.host/?sharecode=EU4R7DTJ36)**
 
 Draw clocks, signals, and buses; drag edge handles to retime waveforms, double-click to toggle levels, annotate with arrows and setup/hold interval lines, export to PNG / SVG / PDF. Includes 5 color themes, full undo/redo, and JSON project files. No build step, no backend, no telemetry.
 
