@@ -240,8 +240,9 @@ const PAD_BOTTOM = 40;
 const GAP = 16;        // 行间距
 const ROW_H = 46;
 const SEP_H = 26;
-const PXPU = 8;        // 每个时间单位的像素（zoom = 1 时）
+let PXPU = 8;          // 每个时间单位的像素（由「每格宽度 ÷ 刻度增量」算出，见 applyScale）
 const FT = 0.8;        // 斜率边沿的过渡宽度（单位）
+const MAX_CONTENT_W = 12000;  // 画布最大宽度，超过就自动压缩比例，避免 SVG 过大卡死
 
 const cx = (t) => LABEL_W + t * PXPU;
 const tx = (x) => (x - LABEL_W) / PXPU;
@@ -428,6 +429,19 @@ function contentW() {
   return LABEL_W + S.span * PXPU + 56;
 }
 
+/**
+ * 由「每格宽度（px）」和「刻度增量」换算出 PXPU。
+ * 老文档没有 gridPx 字段时，按原来的固定比例（8px/单位）反推，保证显示不变。
+ */
+function applyScale() {
+  const inc = Math.max(0.05, +S.ruler.increment || 10);
+  const gp = clamp(+S.ruler.gridPx || inc * 8, 6, 400);
+  const wanted = gp / inc;
+  // 总长度很大时压缩比例，否则内容宽度会爆炸（SVG 过大会卡顿、导出也吃内存）
+  const cap = MAX_CONTENT_W / Math.max(1, S.span);
+  PXPU = Math.max(0.02, Math.min(wanted, cap));
+}
+
 function firstSrc(row) {
   if (!row.first) row.first = {};
   return row.first;
@@ -549,6 +563,7 @@ function render() {
   T = THEME[S.theme] || THEME.dark;
   document.documentElement.setAttribute('data-theme', S.theme || 'dark');
   syncThemeMenu();
+  applyScale();
   layout();
 
   const W = contentW(), H = contentH;
@@ -600,6 +615,11 @@ function drawGrid(W, H) {
   const stepPx = step * PXPU * zoom;
   const minorPx = stepPx / 2;
 
+  // 格子窄的时候标签会挤在一起，按最宽的那个标签算一下要隔几格标一次
+  const widest = (S.ruler.prefix || '') + fmtNum(S.ruler.start + S.span) + (S.ruler.suffix || '');
+  const labelGap = textWidth(widest, 10) + 10;
+  const every = Math.max(1, Math.ceil(labelGap / Math.max(1, stepPx)));
+
   // 细网格
   if (minorPx >= 7) {
     for (let i = 0; ; i++) {
@@ -616,7 +636,7 @@ function drawGrid(W, H) {
     const x = cx(t);
     sv('line', { x1: x, y1: RULER_H, x2: x, y2: H, stroke: T.grid, 'stroke-width': 1 }, canvasEl);
     sv('line', { x1: x, y1: RULER_H - 5, x2: x, y2: RULER_H, stroke: T.faint, 'stroke-width': 1 }, canvasEl);
-    if (stepPx >= 34) {
+    if (stepPx * every >= 40 && i % every === 0) {
       const label = (S.ruler.prefix || '') + fmtNum(S.ruler.start + i * step) + (S.ruler.suffix || '');
       sv('text', {
         x, y: 17, fill: T.dim, 'font-size': 10, 'font-family': FONT,
@@ -1521,7 +1541,7 @@ function renderDocProps() {
 
   b = pGroup('时间轴');
   const r1 = pRow(b);
-  pField(r1, '总长度', fNum(S.span, v => { beginChange('~span'); S.span = clamp(v, 10, 2000); clampAll(); render(); scheduleSave(); }, { min: 10, step: 10 }));
+  pField(r1, '总长度', fNum(S.span, v => { beginChange('~span'); S.span = clamp(v, 10, 100000); clampAll(); render(); scheduleSave(); }, { min: 10, step: 10 }));
   pField(r1, '刻度增量', fNum(S.ruler.increment, v => { beginChange('~inc'); S.ruler.increment = clamp(v, 0.1, 500); render(); scheduleSave(); }, { min: 0.1, step: 1 }));
 
   const r2 = pRow(b);
@@ -1563,7 +1583,26 @@ function renderRulerProps() {
   pField(r2, '增量', fNum(S.ruler.increment, v => { beginChange('~inc'); S.ruler.increment = clamp(v, 0.1, 500); render(); scheduleSave(); }, { min: 0.1, step: 1 }));
 
   b = pGroup('时间轴');
-  pField(b, '总长度（单位）', fNum(S.span, v => { beginChange('~span'); S.span = clamp(v, 10, 2000); clampAll(); render(); scheduleSave(); }, { min: 10, step: 10 }));
+  let noteEl = null;
+  const scaleNote = () => {
+    if (!noteEl) return;
+    const inc = Math.max(0.05, +S.ruler.increment || 10);
+    const cellPx = PXPU * inc;
+    const cells = Math.max(1, S.span / inc);
+    const capped = cellPx < (+S.ruler.gridPx || 0) - 1;
+    noteEl.textContent = '每格 ' + cellPx.toFixed(cellPx >= 10 ? 0 : 1) + 'px × ' +
+      (cells % 1 ? cells.toFixed(1) : cells) + ' 格 ≈ 画布 ' + Math.round(contentW()) + 'px' +
+      (capped ? '（总长度过大，比例已自动压缩）' : '');
+  };
+  pField(b, '总长度（单位）', fNum(S.span, v => {
+    beginChange('~span'); S.span = clamp(v, 10, 100000); clampAll(); render(); scaleNote(); scheduleSave();
+  }, { min: 10, step: 10 }));
+  pField(b, '每格宽度（px）', fNum(S.ruler.gridPx || 80, v => {
+    beginChange('~gridpx'); S.ruler.gridPx = clamp(Math.round(v), 6, 400); render(); scaleNote(); scheduleSave();
+  }, { min: 6, max: 400, step: 2 }));
+  noteEl = mk('div', { class: 'p-note' }, b);
+  noteEl.id = 'ruler-scale-note';
+  scaleNote();
   mk('div', { class: 'p-note', text: '标尺只改变刻度文字，不改变波形位置。总长度决定画布右侧边界。' }, b);
 }
 
@@ -2669,7 +2708,7 @@ function setTool(t) {
 }
 
 /** 缩放档位：放大/缩小按这些固定档走，保证能精确落在 100% */
-const ZOOM_STEPS = [0.3, 0.4, 0.5, 0.6, 0.75, 0.9, 1, 1.25, 1.5, 2, 3, 4];
+const ZOOM_STEPS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.75, 0.9, 1, 1.25, 1.5, 2, 3, 4];
 
 function zoomStep(dir) {
   let next;
@@ -2679,7 +2718,7 @@ function zoomStep(dir) {
 }
 
 function setZoom(z, clientX, clientY) {
-  z = clamp(z, 0.3, 4);
+  z = clamp(z, 0.05, 4);
   const sc = $('#canvas-scroll');
   const r = sc.getBoundingClientRect();
   const old = zoom;
@@ -2700,7 +2739,7 @@ function setZoom(z, clientX, clientY) {
 function fitWidth() {
   const sc = $('#canvas-scroll');
   const avail = sc.clientWidth - 8;
-  zoom = clamp(avail / contentW(), 0.3, 2);
+  zoom = clamp(avail / contentW(), 0.05, 2);
   render();
   sc.scrollLeft = 0;
   updateStatus();
@@ -3225,6 +3264,9 @@ function init() {
   S.breaks = S.breaks || [];
   S.theme = S.theme || 'dark';
   S.seq = S.seq || 1;
+  // 老文档没有「每格宽度」，按原来的 8px/单位 反推，显示效果保持不变
+  if (!S.ruler) S.ruler = { prefix: '', suffix: 'ns', start: 0, increment: 10 };
+  if (!S.ruler.gridPx) S.ruler.gridPx = Math.round(clamp((+S.ruler.increment || 10) * 8, 6, 400));
 
   T = THEME[S.theme] || THEME.dark;
   document.documentElement.setAttribute('data-theme', S.theme);
