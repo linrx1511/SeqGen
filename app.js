@@ -243,6 +243,7 @@ const SEP_H = 26;
 let PXPU = 8;          // 每个时间单位的像素（由「每格宽度 ÷ 刻度增量」算出，见 applyScale）
 const FT = 0.8;        // 斜率边沿的过渡宽度（单位）
 const MAX_CONTENT_W = 12000;  // 画布最大宽度，超过就自动压缩比例，避免 SVG 过大卡死
+const INC_MAX = 100000;       // 刻度增量上限（够放超大时间跨度，同时避免无意义的极端值）
 
 const cx = (t) => LABEL_W + t * PXPU;
 const tx = (x) => (x - LABEL_W) / PXPU;
@@ -654,13 +655,14 @@ function drawGrid(W, H) {
     }
   }
   // 主网格 + 刻度
+  const showLabels = S.ruler.showLabels !== false;
   for (let i = 0; ; i++) {
     const t = i * step;
     if (t > S.span + 0.0001) break;
     const x = cx(t);
     sv('line', { x1: x, y1: RULER_H, x2: x, y2: H, stroke: T.grid, 'stroke-width': 1 }, canvasEl);
     sv('line', { x1: x, y1: RULER_H - 5, x2: x, y2: RULER_H, stroke: T.faint, 'stroke-width': 1 }, canvasEl);
-    if (stepPx * every >= 40 && i % every === 0) {
+    if (showLabels && stepPx * every >= 40 && i % every === 0) {
       const label = (S.ruler.prefix || '') + fmtNum(S.ruler.start + i * step) + (S.ruler.suffix || '');
       sv('text', {
         x, y: 17, fill: T.dim, 'font-size': 10, 'font-family': FONT,
@@ -1565,12 +1567,24 @@ function renderDocProps() {
 
   b = pGroup('时间轴');
   const r1 = pRow(b);
-  pField(r1, '总长度', fNum(S.span, v => { beginChange('~span'); S.span = clamp(v, 10, 100000); clampAll(); render(); scheduleSave(); }, { min: 10, step: 10 }));
-  pField(r1, '刻度增量', fNum(S.ruler.increment, v => { beginChange('~inc'); S.ruler.increment = clamp(v, 0.1, 500); render(); scheduleSave(); }, { min: 0.1, step: 1 }));
+  pField(r1, '总长度', fNum(S.span, v => {
+    beginChange('~span');
+    applyScaleChange(() => { S.span = clamp(v, 10, 100000); clampAll(); });
+    scheduleSave();
+  }, { min: 10, step: 10 }));
+  pField(r1, '刻度增量', fNum(S.ruler.increment, v => {
+    beginChange('~inc');
+    applyScaleChange(() => { S.ruler.increment = clamp(v, 0.1, INC_MAX); });
+    scheduleSave();
+  }, { min: 0.1, step: 1 }));
 
   const r2 = pRow(b);
   pField(r2, '前缀', fText(S.ruler.prefix, v => { beginChange('~pfx'); S.ruler.prefix = v; render(); scheduleSave(); }));
   pField(r2, '后缀', fText(S.ruler.suffix, v => { beginChange('~sfx'); S.ruler.suffix = v; render(); scheduleSave(); }));
+
+  b.appendChild(fCheck('显示刻度文字', S.ruler.showLabels !== false, v => {
+    beginChange('ruler-labels'); S.ruler.showLabels = v; render(); scheduleSave();
+  }));
 
   b = pGroup('快捷键');
   const keys = mk('div', { class: 'p-keys' }, b);
@@ -1606,10 +1620,13 @@ function renderRulerProps() {
   pField(r2, '起始值', fNum(S.ruler.start, v => { beginChange('start'); S.ruler.start = v; render(); scheduleSave(); }, { step: 1 }));
   pField(r2, '增量', fNum(S.ruler.increment, v => {
     beginChange('~inc');
-    applyScaleChange(() => { S.ruler.increment = clamp(v, 0.1, 500); });
+    applyScaleChange(() => { S.ruler.increment = clamp(v, 0.1, INC_MAX); });
     scaleNote();
     scheduleSave();
   }, { min: 0.1, step: 1 }));
+  b.appendChild(fCheck('显示刻度文字', S.ruler.showLabels !== false, v => {
+    beginChange('ruler-labels'); S.ruler.showLabels = v; render(); scheduleSave();
+  }));
 
   b = pGroup('时间轴');
   let noteEl = null;
