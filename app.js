@@ -241,7 +241,7 @@ const GAP = 16;        // 行间距
 const ROW_H = 46;
 const SEP_H = 26;
 let PXPU = 8;          // 每个时间单位的像素（由「每格宽度 ÷ 刻度增量」算出，见 applyScale）
-const FT = 0.8;        // 斜率边沿的过渡宽度（单位）
+const FT = 0.04;       // 斜率边沿的半宽 = 一格宽度的这个比例（见 edgeFtPx）
 const MAX_CONTENT_W = 12000;  // 画布最大宽度，超过就自动压缩比例，避免 SVG 过大卡死
 const INC_MAX = 100000;       // 刻度增量上限（够放超大时间跨度，同时避免无意义的极端值）
 
@@ -841,10 +841,22 @@ function textWidth(str, size) {
   return w;
 }
 
+/**
+ * 斜率边沿的半宽（模型坐标）。
+ * 以前按固定的 0.8 个时间单位算，可是每单位像素会随「刻度增量 / 每格宽度」变化：
+ * 增量调到 1 时 0.8 单位会被拉成 60 多像素的缓坡，看着完全不像跳变。
+ * 现在按「一格宽度的固定比例」算，任何刻度密度下都是同样陡的斜边。
+ */
+function edgeFtPx() {
+  const inc = Math.max(0.05, +S.ruler.increment || 10);
+  const cellPx = PXPU * inc;          // 一格实际占多少像素
+  return clamp(cellPx * FT, 0.8, 12); // 上下限挡住极密/极疏的刻度
+}
+
 /* ---------------------------- 信号 ---------------------------- */
 function drawSignalWave(g, row, hi, lo, mid) {
   const segs = stepSegments(row);
-  const ftPx = (FT / 2) * PXPU;
+  const ftPx = edgeFtPx();
 
   segs.forEach((s, i) => {
     const X0 = cx(s.t0), X1 = cx(s.t1);
@@ -1018,7 +1030,7 @@ function drawClockWave(g, row, hi, lo, mid) {
   const iv = clockIntervals(row);
   const color = wc(row.color);
   const ideal = !!row.ideal;
-  const ftPx = (FT / 2) * PXPU;
+  const ftPx = edgeFtPx();
 
   // 构造电平序列
   let level = 0;
