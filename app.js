@@ -1181,11 +1181,11 @@ function drawAnnotations(parent) {
       }
       if (labelText) {
         const mx = (p.x1 + p.x2) / 2 + 4, my = (p.y1 + p.y2) / 2 - 6;
-        const w = labelText.length * 6.4 + 10;
-        sv('rect', { x: mx - w / 2, y: my - 11, width: w, height: 15, fill: T.bg, opacity: 0.9, rx: 2 }, ga);
+        // 不铺底色块，改用描边光晕：文字压到波形上也能读，又不会挡掉后面的线
         sv('text', {
           x: mx, y: my, fill: color, 'font-size': 10, 'font-family': FONT,
-          'text-anchor': 'middle', 'pointer-events': 'none'
+          'text-anchor': 'middle', 'pointer-events': 'none',
+          stroke: T.bg, 'stroke-width': 3, 'stroke-linejoin': 'round', 'paint-order': 'stroke'
         }, ga).textContent = labelText;
       }
 
@@ -1282,13 +1282,11 @@ function drawAnnotations(parent) {
             'pointer-events': 'none'
           }, ga);
         }
-        sv('rect', {
-          x: bx, y: by, width: lw, height: 15, fill: T.bg, opacity: 0.92, rx: 2,
-          'pointer-events': 'none'
-        }, ga);
+        // 同样不铺底色块：只给文字加一圈描边光晕，波形线从字缝里透出来
         sv('text', {
           x: bx + lw / 2, y: by + 11, fill: col, 'font-size': 10, 'font-family': FONT,
-          'text-anchor': 'middle', 'pointer-events': 'none'
+          'text-anchor': 'middle', 'pointer-events': 'none',
+          stroke: T.bg, 'stroke-width': 3, 'stroke-linejoin': 'round', 'paint-order': 'stroke'
         }, ga).textContent = label;
       }
 
