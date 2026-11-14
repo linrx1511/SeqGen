@@ -431,15 +431,39 @@ function contentW() {
 
 /**
  * 由「每格宽度（px）」和「刻度增量」换算出 PXPU。
- * 老文档没有 gridPx 字段时，按原来的固定比例（8px/单位）反推，保证显示不变。
+ * 关键是两件事分开：格子宽度由 gridPx 决定（改增量不影响它），增量只决定一格代表多少时间单位。
+ * 老文档没有 gridPx 字段时，init 里会按原来的 8px/单位 反推；这里再兜一层，保证任何新建文档也有定值。
  */
 function applyScale() {
   const inc = Math.max(0.05, +S.ruler.increment || 10);
-  const gp = clamp(+S.ruler.gridPx || inc * 8, 6, 400);
+  if (!S.ruler.gridPx) S.ruler.gridPx = 80;   // 兜底：没有就固定 80，之后改增量不会再改变格子宽度
+  const gp = clamp(+S.ruler.gridPx, 6, 400);
   const wanted = gp / inc;
   // 总长度很大时压缩比例，否则内容宽度会爆炸（SVG 过大会卡顿、导出也吃内存）
   const cap = MAX_CONTENT_W / Math.max(1, S.span);
   PXPU = Math.max(0.02, Math.min(wanted, cap));
+}
+
+/**
+ * 改标尺比例（增量 / 每格宽度 / 总长度）后的统一处理：
+ * 重算 PXPU，并按新旧比例映射自由摆放的标注坐标，否则标注会和波形错位。
+ */
+function applyScaleChange(mutate) {
+  const oldPx = PXPU;
+  mutate();
+  applyScale();
+  if (oldPx > 0 && Math.abs(PXPU - oldPx) > 1e-9) {
+    const k = PXPU / oldPx;
+    const fx = (x) => LABEL_W + ((x || 0) - LABEL_W) * k;
+    (S.annotations || []).forEach(a => {
+      if (a.type === 'text') { if (!a.a1) a.x = fx(a.x); }
+      else {
+        if (!a.a1) a.x1 = fx(a.x1);
+        if (!a.a2) a.x2 = fx(a.x2);
+      }
+    });
+  }
+  render();
 }
 
 function firstSrc(row) {
@@ -1580,7 +1604,12 @@ function renderRulerProps() {
   pField(r1, '后缀', fText(S.ruler.suffix, v => { beginChange('~sfx'); S.ruler.suffix = v; render(); scheduleSave(); }));
   const r2 = pRow(b);
   pField(r2, '起始值', fNum(S.ruler.start, v => { beginChange('start'); S.ruler.start = v; render(); scheduleSave(); }, { step: 1 }));
-  pField(r2, '增量', fNum(S.ruler.increment, v => { beginChange('~inc'); S.ruler.increment = clamp(v, 0.1, 500); render(); scheduleSave(); }, { min: 0.1, step: 1 }));
+  pField(r2, '增量', fNum(S.ruler.increment, v => {
+    beginChange('~inc');
+    applyScaleChange(() => { S.ruler.increment = clamp(v, 0.1, 500); });
+    scaleNote();
+    scheduleSave();
+  }, { min: 0.1, step: 1 }));
 
   b = pGroup('时间轴');
   let noteEl = null;
@@ -1595,15 +1624,19 @@ function renderRulerProps() {
       (capped ? '（总长度过大，比例已自动压缩）' : '');
   };
   pField(b, '总长度（单位）', fNum(S.span, v => {
-    beginChange('~span'); S.span = clamp(v, 10, 100000); clampAll(); render(); scaleNote(); scheduleSave();
+    beginChange('~span');
+    applyScaleChange(() => { S.span = clamp(v, 10, 100000); clampAll(); });
+    scaleNote(); scheduleSave();
   }, { min: 10, step: 10 }));
   pField(b, '每格宽度（px）', fNum(S.ruler.gridPx || 80, v => {
-    beginChange('~gridpx'); S.ruler.gridPx = clamp(Math.round(v), 6, 400); render(); scaleNote(); scheduleSave();
+    beginChange('~gridpx');
+    applyScaleChange(() => { S.ruler.gridPx = clamp(Math.round(v), 6, 400); });
+    scaleNote(); scheduleSave();
   }, { min: 6, max: 400, step: 2 }));
   noteEl = mk('div', { class: 'p-note' }, b);
   noteEl.id = 'ruler-scale-note';
   scaleNote();
-  mk('div', { class: 'p-note', text: '标尺只改变刻度文字，不改变波形位置。总长度决定画布右侧边界。' }, b);
+  mk('div', { class: 'p-note', text: '增量决定一格代表多少时间单位，格子宽度由「每格宽度」决定——改增量时格子宽度不变，整张图会按格数伸缩。' }, b);
 }
 
 function renderRowProps(row) {
