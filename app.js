@@ -2950,9 +2950,17 @@ function copySVGCode() {
 
 /* ============================ 11. 文件操作 ============================ */
 let projHandle = null;   // 上次保存的工程文件句柄，用于 Ctrl+S 直接覆盖
+let projFileName = null; // 当前工程的文件名（打开时的原名，或上次另存为用的名字）
 
 function projectName() {
-  return (S.title || 'timing').replace(/[\\/:*?"<>|]/g, '_') + '.seqgen.json';
+  if (projFileName) return projFileName;   // 沿用原名，不追加任何后缀
+  return (S.title || 'timing').replace(/[\\/:*?"<>|]/g, '_') + '.json';
+}
+
+/** 换成另一份文档（新建 / 载入示例）时断开与原文件的绑定，避免误覆盖 */
+function detachProjectFile() {
+  projHandle = null;
+  projFileName = null;
 }
 
 async function saveProject(forcePick) {
@@ -2969,20 +2977,16 @@ async function saveProject(forcePick) {
       projHandle = null;   // 句柄失效（文件被移动/权限收回）→ 重新选
     }
   }
-  const h = await saveBlobAs(blob, projectName(), 'SeqGen 工程', 'application/json');
-  if (h) projHandle = h;
+  const h = await saveBlobAs(blob, projectName(), 'JSON 工程', 'application/json');
+  if (h) { projHandle = h; projFileName = h.name; }
 }
 
 function saveProjectAs() {
   return saveProject(true);
 }
 
-function openProject() {
-  $('#file-input').click();
-}
-$('#file-input').addEventListener('change', (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
+/** 读取工程文件；有文件句柄时记住它，之后 Ctrl+S 直接覆盖原文件 */
+function loadProjectFile(f, handle) {
   const fr = new FileReader();
   fr.onload = () => {
     try {
@@ -2992,23 +2996,47 @@ $('#file-input').addEventListener('change', (e) => {
       S.annotations = S.annotations || [];
       S.breaks = S.breaks || [];
       S.seq = S.seq || 1;
-      projHandle = null;
+      projHandle = handle || null;
+      projFileName = f.name || null;
       sel = null;
       undoStack = []; redoStack = [];
       render(); renderProps(); updateUndoButtons(); scheduleSave();
-      toast('已载入工程');
+      toast('已载入：' + (f.name || '工程'));
     } catch (err) {
       toast('文件格式无法识别', true);
     }
-    e.target.value = '';
   };
   fr.readAsText(f);
+}
+
+async function openProject() {
+  // 优先用文件选择器：能拿到句柄，保存时可以写回同一个文件，不再反复弹对话框
+  if (typeof window.showOpenFilePicker === 'function') {
+    try {
+      const [h] = await window.showOpenFilePicker({
+        types: [{ description: 'JSON 工程', accept: { 'application/json': ['.json'] } }],
+        multiple: false
+      });
+      loadProjectFile(await h.getFile(), h);
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;   // 用户取消
+      console.warn('文件选择器不可用，改用 input：', err);
+    }
+  }
+  $('#file-input').click();
+}
+$('#file-input').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  loadProjectFile(f, null);
+  e.target.value = '';
 });
 
 function newProject() {
   if (S.rows.length && !confirm('新建将清空当前画布，确定继续？')) return;
   S = blankDoc();
-  projHandle = null;
+  detachProjectFile();
   sel = null;
   undoStack = []; redoStack = [];
   render(); renderProps(); updateUndoButtons(); scheduleSave();
@@ -3074,6 +3102,7 @@ function bindToolbar() {
     if (a === 'saveas') saveProjectAs();
     if (a === 'clear') clearCanvas();
     if (a === 'sample') {
+      detachProjectFile();
       S = sampleDoc();
       sel = null; undoStack = []; redoStack = [];
       render(); renderProps(); updateUndoButtons(); scheduleSave();
@@ -3142,6 +3171,7 @@ function bindToolbar() {
   });
   $$('#empty-hint [data-act]').forEach(b => {
     b.addEventListener('click', () => {
+      detachProjectFile();
       S = sampleDoc(); sel = null; undoStack = []; redoStack = [];
       render(); renderProps(); updateUndoButtons(); scheduleSave();
     });
@@ -3197,7 +3227,7 @@ function showHelp() {
     ]);
     sec('数据', [
       ['自动保存', '每次编辑后保存在浏览器本地（localStorage）'],
-      ['工程文件', '文件 → 保存工程，导出 .seqgen.json，可备份/迁移']
+      ['工程文件', '文件 → 保存工程，导出 .json，可备份/迁移']
     ]);
 
     const close = mk('button', { class: 'close', text: '开始使用' }, box);
